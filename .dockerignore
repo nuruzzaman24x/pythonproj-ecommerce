@@ -1,0 +1,28 @@
+# Git history and git files are not needed in the image
+.git
+.gitignore
+
+# k8s manifests, pipeline and compose files are not needed inside the image
+devxhub-gitops
+Jenkinsfile
+docker-compose.yaml
+Dockerfile
+README.md
+
+# Secrets must not go into the image, they will come from k8s Secret
+.env
+.env.example
+
+# Python cache and compiled files are not needed
+__pycache__
+*.pyc
+
+# Local database and virtual env are not needed
+db.sqlite3
+venv
+
+# static_root will be generated fresh during the build
+static/static_root
+
+# Media (uploaded images) arrive at runtime, so keep them out of the image
+static/media

@@ -1,0 +1,73 @@
+# ---------- Stage 1: builder ----------
+# Build tools live only here. They will NOT reach the final image.
+FROM python:3.11-slim-bookworm AS builder
+
+# Compilers and dev libraries needed to build psycopg2 and Pillow from source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev libjpeg-dev zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a virtual env so we can copy all packages to the next stage in one folder
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
+
+# Copy only requirements first, so Docker can cache this layer
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# ---------- Stage 2: static-builder ----------
+# Run collectstatic once at build time
+FROM builder AS static-builder
+
+COPY . .
+
+# Dummy values only for the build. Real values come from k8s Secret at runtime.
+RUN SECRET_KEY=build-only DJANGO_ALLOWED_HOSTS=localhost \
+    python manage.py collectstatic --noinput
+
+
+# ---------- Stage 3: django (final app image) ----------
+FROM python:3.11-slim-bookworm AS django
+
+# Only runtime libraries, no gcc
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 libjpeg62-turbo zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# Do not write .pyc files, and print logs immediately
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Create a non-root user to run the app
+RUN groupadd --system app && useradd --system --gid app --home /app app
+
+WORKDIR /app
+
+# Copy ready-made packages from the builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy the project code (.dockerignore filters unwanted files)
+COPY --chown=app:app . .
+
+# Create the media folder for uploaded images (a volume will be mounted here in k8s)
+RUN mkdir -p /app/static/media && chown -R app:app /app/static
+
+USER app
+
+EXPOSE 8000
+
+# Start gunicorn directly. Migrate/data tasks will move out of the entrypoint later.
+CMD ["gunicorn", "--workers=3", "--bind", "0.0.0.0:8000", "config.wsgi:application"]
+
+
+# ---------- Stage 4: nginx (final web image) ----------
+FROM nginx:1.27-alpine AS nginx
+
+# Put static files in the same path our nginx.conf already uses
+COPY --from=static-builder /app/static/static_root /app/static/static_root
+
+EXPOSE 80
