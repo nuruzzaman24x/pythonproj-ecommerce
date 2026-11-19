@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1                  # prometheus operator API version
+kind: PodMonitor                                      # scrape pods directly, no service needed
+metadata:                                             # name and place
+  name: argo-rollouts                                 # podmonitor name
+  namespace: monitoring                               # same namespace as prometheus
+spec:                                                 # how it works
+  namespaceSelector:                                  # where to look for the pods
+    matchNames:                                       # list of namespaces
+      - argo-rollouts                                 # the argo rollouts namespace
+  selector:                                           # which pods to scrape
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: argo-rollouts           # argo rollouts controller pod
+  podMetricsEndpoints:                                # scrape settings
+    - port: metrics                                   # container port named "metrics" (8090)
+      interval: 30s                                   # scrape every 30 seconds

@@ -1,0 +1,14 @@
+apiVersion: v1                                        # core API version
+kind: PersistentVolumeClaim                           # a request for storage space
+metadata:                                             # name and place
+  name: django-media                                  # the django and nginx pods will use this name later
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django-media              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # claim settings
+  accessModes: ["ReadWriteMany"]                      # many pods can read and write at the same time
+  storageClassName: nfs-client                        # use the NFS storage class
+  resources:                                          # size request
+    requests:                                         # asked size
+      storage: 5Gi                                    # 5 GB of space for uploaded images

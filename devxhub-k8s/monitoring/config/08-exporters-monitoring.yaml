@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1                  # prometheus operator API version
+kind: ServiceMonitor                                  # tells prometheus what to scrape
+metadata:                                             # name and place
+  name: ecommerce-exporters                           # servicemonitor name
+  namespace: monitoring                               # same namespace as prometheus
+spec:                                                 # how it works
+  namespaceSelector:                                  # where to look for the services
+    matchNames:                                       # list of namespaces
+      - ecommerce-python                              # the app namespace
+  selector:                                           # which services to scrape
+    matchExpressions:                                 # match by label rule
+      - key: app.kubernetes.io/name                   # label key
+        operator: In                                  # value must be one of these
+        values: ["postgres-exporter", "redis-exporter"]   # both exporters
+  endpoints:                                          # scrape settings
+    - port: metrics                                   # the port name in both services
+      interval: 30s                                   # scrape every 30 seconds
+---
+apiVersion: monitoring.coreos.com/v1                  # prometheus operator API version
+kind: PrometheusRule                                  # alert rules
+metadata:                                             # name and place
+  name: ecommerce-exporters                           # rule name
+  namespace: monitoring                               # same namespace as prometheus
+spec:                                                 # how it works
+  groups:                                             # list of rule groups
+    - name: ecommerce-exporters.rules                 # group name
+      rules:                                          # list of rules
+        - alert: PostgresDown                         # alert name
+          expr: pg_up{namespace="ecommerce-python"} == 0   # exporter cannot reach postgres
+          for: 2m                                     # must stay true for 2 minutes
+          labels:                                     # extra labels
+            severity: critical                        # how serious
+          annotations:                                # message
+            summary: "Postgres is down"
+        - alert: RedisDown                            # alert name
+          expr: redis_up{namespace="ecommerce-python"} == 0   # exporter cannot reach redis
+          for: 2m                                     # must stay true for 2 minutes
+          labels:                                     # extra labels
+            severity: warning                         # how serious
+          annotations:                                # message
+            summary: "Redis is down"

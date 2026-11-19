@@ -1,0 +1,27 @@
+apiVersion: policy/v1                                 # PDB API version
+kind: PodDisruptionBudget                             # limits how many pods can be down during maintenance
+metadata:                                             # name and place
+  name: django                                        # pdb name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the pdb works
+  minAvailable: 2                                     # at least 2 django pods must stay running
+  selector:                                           # which pods this pdb protects
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: django                  # same label as the rollout pods
+---
+apiVersion: policy/v1                                 # PDB API version
+kind: PodDisruptionBudget                             # limits how many pods can be down during maintenance
+metadata:                                             # name and place
+  name: nginx-static                                  # pdb name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the pdb works
+  minAvailable: 1                                     # at least 1 nginx pod must stay running
+  selector:                                           # which pods this pdb protects
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: nginx-static            # same label as the nginx pods

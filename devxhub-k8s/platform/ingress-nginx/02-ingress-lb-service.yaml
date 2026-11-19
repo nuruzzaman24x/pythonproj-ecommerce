@@ -1,0 +1,22 @@
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door
+metadata:                                             # name and place
+  name: ingress-nginx-controller-python               # new name, so it does not touch the old service
+  namespace: ingress-nginx                            # same namespace as the old ingress controller
+  labels:                                             # standard labels
+    app.kubernetes.io/part-of: ecommerce-python       # which project this IP belongs to
+spec:                                                 # how the service works
+  type: LoadBalancer                                  # MetalLB sees this type and gives an outside IP automatically
+  ports:                                              # open ports
+    - name: http                                      # port name
+      port: 80                                        # outside port 80
+      protocol: TCP                                   # TCP protocol
+      targetPort: http                                # goes to the "http" port of the controller pod
+    - name: https                                     # second port name
+      port: 443                                       # outside port 443
+      protocol: TCP                                   # TCP protocol
+      targetPort: https                               # goes to the "https" port of the controller pod
+  selector:                                           # send traffic to the SAME old controller pod
+    app.kubernetes.io/component: controller           # controller pod
+    app.kubernetes.io/instance: ingress-nginx         # same instance
+    app.kubernetes.io/name: ingress-nginx             # same app

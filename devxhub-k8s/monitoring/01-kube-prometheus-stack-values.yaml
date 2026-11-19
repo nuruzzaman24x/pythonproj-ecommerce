@@ -1,0 +1,88 @@
+# install: helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring -f 01-kube-prometheus-stack-values.yaml --version 93.4.1
+fullnameOverride: ""                                  # keep the default names
+
+prometheus:                                           # metrics database
+  prometheusSpec:                                     # prometheus settings
+    retention: 7d                                     # keep metrics for 7 days
+    serviceMonitorSelectorNilUsesHelmValues: false    # pick up ServiceMonitors from every namespace
+    podMonitorSelectorNilUsesHelmValues: false        # pick up PodMonitors from every namespace
+    ruleSelectorNilUsesHelmValues: false              # pick up PrometheusRules from every namespace
+    resources:                                        # cpu and memory
+      requests:                                       # minimum guaranteed
+        cpu: 200m                                     # 0.2 cpu core
+        memory: 1Gi                                   # 1 GB memory
+      limits:                                         # maximum allowed
+        cpu: "1"                                      # 1 cpu core
+        memory: 2Gi                                   # 2 GB memory
+    storageSpec:                                      # permanent storage for metrics
+      volumeClaimTemplate:                            # storage request
+        spec:                                         # claim settings
+          storageClassName: nfs-client                # use the NFS storage class
+          accessModes: ["ReadWriteOnce"]              # one pod reads and writes
+          resources:                                  # size request
+            requests:                                 # asked size
+              storage: 20Gi                           # 20 GB of space
+
+alertmanager:                                         # sends alerts
+  enabled: true                                       # keep it on, add receivers (email/slack) later
+
+grafana:                                              # dashboards
+  admin:                                              # admin login comes from a secret, not from this file
+    existingSecret: grafana-admin                     # secret name
+    userKey: admin-user                               # key for the username
+    passwordKey: admin-password                       # key for the password
+  persistence:                                        # keep grafana data after restart
+    enabled: true                                     # turn on storage
+    storageClassName: nfs-client                      # use the NFS storage class
+    size: 5Gi                                         # 5 GB of space
+  grafana.ini:                                        # grafana settings
+    server:                                           # web server settings
+      root_url: https://grafana.local.com             # public address
+  dashboardProviders:                                 # tells grafana where to load dashboards from
+    dashboardproviders.yaml:                          # provider file name
+      apiVersion: 1                                   # provider file version
+      providers:                                      # list of providers
+        - name: ecommerce                             # provider name
+          orgId: 1                                    # default organization
+          folder: Ecommerce                           # folder shown in the grafana menu
+          type: file                                  # load dashboards from files
+          disableDeletion: true                       # dashboards cannot be deleted from the UI, only from this file
+          editable: false                             # UI edits are not kept, this file is the source of truth
+          options:                                    # provider options
+            path: /var/lib/grafana/dashboards/ecommerce   # folder the dashboards are downloaded into
+  dashboards:                                         # dashboards to download at startup
+    ecommerce:                                        # must match the provider name above
+      nginx-ingress:                                  # NGINX Ingress Controller
+        gnetId: 9614                                  # dashboard id on grafana.com
+        revision: 1                                   # fixed revision, so it never changes by itself
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+          - name: DS_PROM
+            value: Prometheus
+      postgresql:                                     # PostgreSQL (postgres-exporter)
+        gnetId: 9628                                  # dashboard id on grafana.com
+        revision: 7                                   # fixed revision
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+          - name: DS_PROM
+            value: Prometheus
+      redis:                                          # Redis (redis-exporter)
+        gnetId: 763                                   # dashboard id on grafana.com
+        revision: 6                                   # fixed revision
+        datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+          - name: DS_PROM
+            value: Prometheus
+
+# kubeadm binds these to 127.0.0.1, so prometheus cannot reach them and they show as "down"
+kubeEtcd:                                             # etcd metrics
+  enabled: false                                      # off
+kubeControllerManager:                                # controller-manager metrics
+  enabled: false                                      # off
+kubeScheduler:                                        # scheduler metrics
+  enabled: false                                      # off
+kubeProxy:                                            # kube-proxy metrics
+  enabled: false                                      # off

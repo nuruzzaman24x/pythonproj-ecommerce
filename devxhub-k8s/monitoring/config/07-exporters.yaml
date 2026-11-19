@@ -1,0 +1,143 @@
+apiVersion: apps/v1                                   # apps API version
+kind: Deployment                                      # postgres metrics exporter
+metadata:                                             # name and place
+  name: postgres-exporter                             # deployment name
+  namespace: ecommerce-python                         # same namespace as postgres
+  labels:                                             # standard labels
+    app.kubernetes.io/name: postgres-exporter         # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the deployment works
+  replicas: 1                                         # one exporter is enough
+  selector:                                           # which pods belong to this deployment
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: postgres-exporter       # same label as the pod template
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: postgres-exporter     # service finds the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      containers:                                     # list of containers
+        - name: exporter                              # container name
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0   # fixed version
+          ports:                                      # container ports
+            - name: metrics                           # port name used by the service
+              containerPort: 9187                     # exporter port
+          env:                                        # environment variables
+            - name: DATA_SOURCE_URI                   # where postgres is
+              value: "postgres:5432/e_shoper?sslmode=disable"   # service name, port, database
+            - name: DATA_SOURCE_USER                  # database user
+              valueFrom:                              # take the value from somewhere else
+                configMapKeyRef:                      # from the configmap
+                  name: django-config                 # configmap name
+                  key: SQL_USER                       # key inside the configmap
+            - name: DATA_SOURCE_PASS                  # database password
+              valueFrom:                              # take the value from somewhere else
+                secretKeyRef:                         # from the secret
+                  name: django-secret                 # secret name
+                  key: SQL_PASSWORD                   # key inside the secret
+          readinessProbe:                             # is the pod ready to get traffic?
+            httpGet:                                  # call a web address
+              path: /                                 # exporter home page
+              port: metrics                           # the container port named "metrics"
+            periodSeconds: 10                         # check every 10 seconds
+          livenessProbe:                              # is the pod still alive?
+            httpGet:                                  # call a web address
+              path: /                                 # exporter home page
+              port: metrics                           # the container port named "metrics"
+            initialDelaySeconds: 15                   # give it time to start
+            periodSeconds: 20                         # check every 20 seconds
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 25m                                # 0.025 cpu core
+              memory: 32Mi                            # 32 MB memory
+            limits:                                   # maximum allowed
+              cpu: 200m                               # 0.2 cpu core
+              memory: 128Mi                           # 128 MB memory
+          securityContext:                            # safety settings for the container
+            allowPrivilegeEscalation: false           # the process cannot gain more rights
+            capabilities:                             # linux powers
+              drop: ["ALL"]                           # remove all extra linux powers
+---
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to the exporter
+metadata:                                             # name and place
+  name: postgres-exporter                             # service name
+  namespace: ecommerce-python                         # same namespace as the exporter
+  labels:                                             # label used by the ServiceMonitor
+    app.kubernetes.io/name: postgres-exporter         # which component this is
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster
+  ports:                                              # open ports
+    - name: metrics                                   # port name
+      port: 9187                                      # service port
+      targetPort: metrics                             # goes to the container port named "metrics"
+  selector:                                           # send traffic to the exporter pod
+    app.kubernetes.io/name: postgres-exporter         # match the pod label above
+---
+apiVersion: apps/v1                                   # apps API version
+kind: Deployment                                      # redis metrics exporter
+metadata:                                             # name and place
+  name: redis-exporter                                # deployment name
+  namespace: ecommerce-python                         # same namespace as redis
+  labels:                                             # standard labels
+    app.kubernetes.io/name: redis-exporter            # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the deployment works
+  replicas: 1                                         # one exporter is enough
+  selector:                                           # which pods belong to this deployment
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: redis-exporter          # same label as the pod template
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: redis-exporter        # service finds the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      containers:                                     # list of containers
+        - name: exporter                              # container name
+          image: oliver006/redis_exporter:v1.62.0     # fixed version
+          ports:                                      # container ports
+            - name: metrics                           # port name used by the service
+              containerPort: 9121                     # exporter port
+          env:                                        # environment variables
+            - name: REDIS_ADDR                        # where redis is
+              value: "redis://redis:6379"             # redis service name and port
+          readinessProbe:                             # is the pod ready to get traffic?
+            httpGet:                                  # call a web address
+              path: /                                 # exporter home page
+              port: metrics                           # the container port named "metrics"
+            periodSeconds: 10                         # check every 10 seconds
+          livenessProbe:                              # is the pod still alive?
+            httpGet:                                  # call a web address
+              path: /                                 # exporter home page
+              port: metrics                           # the container port named "metrics"
+            initialDelaySeconds: 15                   # give it time to start
+            periodSeconds: 20                         # check every 20 seconds
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 25m                                # 0.025 cpu core
+              memory: 32Mi                            # 32 MB memory
+            limits:                                   # maximum allowed
+              cpu: 200m                               # 0.2 cpu core
+              memory: 128Mi                           # 128 MB memory
+          securityContext:                            # safety settings for the container
+            allowPrivilegeEscalation: false           # the process cannot gain more rights
+            capabilities:                             # linux powers
+              drop: ["ALL"]                           # remove all extra linux powers
+---
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to the exporter
+metadata:                                             # name and place
+  name: redis-exporter                                # service name
+  namespace: ecommerce-python                         # same namespace as the exporter
+  labels:                                             # label used by the ServiceMonitor
+    app.kubernetes.io/name: redis-exporter            # which component this is
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster
+  ports:                                              # open ports
+    - name: metrics                                   # port name
+      port: 9121                                      # service port
+      targetPort: metrics                             # goes to the container port named "metrics"
+  selector:                                           # send traffic to the exporter pod
+    app.kubernetes.io/name: redis-exporter            # match the pod label above

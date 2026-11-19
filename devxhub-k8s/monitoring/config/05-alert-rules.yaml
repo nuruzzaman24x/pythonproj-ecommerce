@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1                  # prometheus operator API version
+kind: PrometheusRule                                  # alert rules
+metadata:                                             # name and place
+  name: ecommerce-python                              # rule name
+  namespace: monitoring                               # same namespace as prometheus
+spec:                                                 # how it works
+  groups:                                             # list of rule groups
+    - name: ecommerce-python.rules                    # group name
+      rules:                                          # list of rules
+        - alert: EcommerceHigh5xxRate                 # alert name
+          expr: |                                     # more than 5% of requests fail
+            sum(rate(nginx_ingress_controller_requests{namespace="ecommerce-python",status=~"5.."}[5m]))
+            / sum(rate(nginx_ingress_controller_requests{namespace="ecommerce-python"}[5m])) > 0.05
+          for: 5m                                     # must stay true for 5 minutes
+          labels:                                     # extra labels
+            severity: critical                        # how serious
+          annotations:                                # message
+            summary: "More than 5% of requests return 5xx"
+        - alert: EcommercePodNotReady                 # alert name
+          expr: kube_pod_status_ready{namespace="ecommerce-python",condition="false"} == 1   # a pod is not ready
+          for: 5m                                     # must stay true for 5 minutes
+          labels:                                     # extra labels
+            severity: warning                         # how serious
+          annotations:                                # message
+            summary: "Pod {{ $labels.pod }} is not ready for 5 minutes"
+        - alert: EcommerceHpaAtMax                    # alert name
+          expr: |                                     # hpa cannot add more pods
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="ecommerce-python"}
+            == kube_horizontalpodautoscaler_spec_max_replicas{namespace="ecommerce-python"}
+          for: 10m                                    # must stay true for 10 minutes
+          labels:                                     # extra labels
+            severity: warning                         # how serious
+          annotations:                                # message
+            summary: "HPA {{ $labels.horizontalpodautoscaler }} is at max replicas, consider raising maxReplicas"
+        - alert: EcommerceBackupJobFailed             # alert name
+          expr: kube_job_status_failed{namespace="ecommerce-python"} > 0   # a job failed
+          for: 1m                                     # must stay true for 1 minute
+          labels:                                     # extra labels
+            severity: critical                        # how serious
+          annotations:                                # message
+            summary: "Job {{ $labels.job_name }} failed (postgres backup?)"

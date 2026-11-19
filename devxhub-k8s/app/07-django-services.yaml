@@ -1,0 +1,33 @@
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to django
+metadata:                                             # name and place
+  name: django-stable                                 # the old (production) version gets 80% of the traffic through this
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster, ingress will bring users here
+  ports:                                              # open ports
+    - name: http                                      # port name
+      port: 80                                        # service port
+      targetPort: 8000                                # gunicorn listens on 8000 inside the pod
+  selector:                                           # send traffic to the django pods
+    app.kubernetes.io/name: django                    # Argo Rollouts adds the version hash to this selector by itself
+---
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to django
+metadata:                                             # name and place
+  name: django-canary                                 # the new version gets 20% of the traffic through this
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster
+  ports:                                              # open ports
+    - name: http                                      # port name
+      port: 80                                        # service port
+      targetPort: 8000                                # gunicorn listens on 8000 inside the pod
+  selector:                                           # send traffic to the django pods
+    app.kubernetes.io/name: django                    # Argo Rollouts adds the version hash to this selector by itself

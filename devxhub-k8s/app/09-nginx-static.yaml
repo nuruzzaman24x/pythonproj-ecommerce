@@ -1,0 +1,114 @@
+apiVersion: v1                                        # core API version
+kind: ConfigMap                                       # a settings file for nginx
+metadata:                                             # name and place
+  name: nginx-static-config                           # the deployment will mount this name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+data:                                                 # file name = file content
+  default.conf: |                                     # this becomes /etc/nginx/conf.d/default.conf
+    server {                                          # one web server block
+      listen 80;                                      # listen on port 80
+      server_name _;                                  # accept any host name
+      location /static/ {                             # requests starting with /static/
+        alias /app/static/static_root/;               # serve files from the static folder inside the image
+        expires 7d;                                   # tell browsers to keep files for 7 days
+        access_log off;                               # do not log every static file request
+      }
+      location /media/ {                              # requests starting with /media/
+        alias /app/static/media/;                     # serve uploaded files from the shared storage
+      }
+      location = /healthz {                           # exact path for health checks
+        access_log off;                               # do not log health checks
+        return 200 "ok\n";                            # answer ok
+      }
+    }
+---
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to nginx
+metadata:                                             # name and place
+  name: nginx-static                                  # ingress will send /static/ and /media/ here
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster
+  ports:                                              # open ports
+    - name: http                                      # port name
+      port: 80                                        # service port
+      targetPort: http                                # goes to the container port named "http"
+  selector:                                           # send traffic to the nginx pods
+    app.kubernetes.io/name: nginx-static              # match the pod label below
+---
+apiVersion: apps/v1                                   # apps API version
+kind: Deployment                                      # static files are the same for every pod, so a normal deployment is fine
+metadata:                                             # name and place
+  name: nginx-static                                  # deployment name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the deployment works
+  replicas: 2                                         # two pods, so one can restart without downtime
+  selector:                                           # which pods belong to this deployment
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: nginx-static            # same label as the pod template
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: nginx-static          # service and deployment find the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      topologySpreadConstraints:                      # spread pods across nodes
+        - maxSkew: 1                                  # pod count difference between nodes is at most 1
+          topologyKey: kubernetes.io/hostname         # spread by node name
+          whenUnsatisfiable: ScheduleAnyway           # prefer spreading, but still schedule if it cannot
+          labelSelector:                              # which pods to count
+            matchLabels:                              # match by labels
+              app.kubernetes.io/name: nginx-static    # the nginx pods
+      containers:                                     # list of containers
+        - name: nginx                                 # container name
+          image: nuruzzaman24x/ecommerce-nginx:1.0    # the nginx image with static files inside
+          imagePullPolicy: IfNotPresent               # download only if the node does not have it
+          ports:                                      # container ports
+            - name: http                              # port name used by the service
+              containerPort: 80                       # nginx port
+          volumeMounts:                               # where to mount things
+            - name: nginx-config                      # the config volume below
+              mountPath: /etc/nginx/conf.d/default.conf   # replace the default nginx config file
+              subPath: default.conf                   # take only this one file from the configmap
+            - name: media                             # the shared media storage below
+              mountPath: /app/static/media            # same path django writes uploads to
+              readOnly: true                          # nginx only reads, django writes
+          readinessProbe:                             # is the pod ready to get traffic?
+            httpGet:                                  # call a web address
+              path: /healthz                          # the health path from our config
+              port: http                              # the container port named "http"
+            initialDelaySeconds: 3                    # wait 3 seconds before the first check
+            periodSeconds: 10                         # check every 10 seconds
+            timeoutSeconds: 3                         # fail if no answer in 3 seconds
+            failureThreshold: 3                       # not ready after 3 failures in a row
+          livenessProbe:                              # is the pod still alive?
+            httpGet:                                  # call a web address
+              path: /healthz                          # the health path from our config
+              port: http                              # the container port named "http"
+            initialDelaySeconds: 10                   # wait 10 seconds, give nginx time to start
+            periodSeconds: 20                         # check every 20 seconds
+            timeoutSeconds: 3                         # fail if no answer in 3 seconds
+            failureThreshold: 3                       # restart the container after 3 failures in a row
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 25m                                # 0.025 cpu core
+              memory: 32Mi                            # 32 MB memory
+            limits:                                   # maximum allowed
+              cpu: 200m                               # 0.2 cpu core
+              memory: 128Mi                           # 128 MB memory
+      volumes:                                        # storage and config sources
+        - name: nginx-config                          # volume name used in volumeMounts
+          configMap:                                  # take the content from a configmap
+            name: nginx-static-config                 # the configmap created above
+        - name: media                                 # volume name used in volumeMounts
+          persistentVolumeClaim:                      # take the content from a storage claim
+            claimName: django-media                   # the shared media storage

@@ -1,0 +1,5 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:                                            # must exist BEFORE helm install (grafana reads the secret)
+  - 00-namespace.yaml
+  - 03-grafana-sealed-secret.yaml

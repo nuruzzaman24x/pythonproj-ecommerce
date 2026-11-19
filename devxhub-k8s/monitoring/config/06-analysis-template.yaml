@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1                      # Argo Rollouts API version
+kind: AnalysisTemplate                                # an automatic health check for a release
+metadata:                                             # name and place
+  name: django-canary-check                           # the Rollout will use this name
+  namespace: ecommerce-python                         # same namespace as the Rollout
+spec:                                                 # how the check works
+  metrics:                                            # list of checks
+    - name: success-rate                              # check 1: how many requests succeed
+      interval: 30s                                   # run every 30 seconds
+      count: 4                                        # run 4 times (about 2 minutes)
+      successCondition: result[0] >= 0.95             # pass if 95% or more requests are not 5xx
+      failureLimit: 1                                 # fail the release after 2 bad results
+      provider:                                       # where the data comes from
+        prometheus:                                   # prometheus
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090   # prometheus service
+          query: |                                    # "or on() vector(1)" = no traffic counts as pass
+            (
+              sum(rate(nginx_ingress_controller_requests{namespace="ecommerce-python",ingress="django-django-canary",status!~"5.."}[2m]))
+              /
+              sum(rate(nginx_ingress_controller_requests{namespace="ecommerce-python",ingress="django-django-canary"}[2m]))
+            ) or on() vector(1)
+    - name: p95-latency                               # check 2: how fast the canary answers
+      interval: 30s                                   # run every 30 seconds
+      count: 4                                        # run 4 times
+      successCondition: result[0] < 1                 # pass if 95% of requests finish under 1 second
+      failureLimit: 1                                 # fail the release after 2 bad results
+      provider:                                       # where the data comes from
+        prometheus:                                   # prometheus
+          address: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090   # prometheus service
+          query: |                                    # "or on() vector(0)" = no traffic counts as pass
+            histogram_quantile(0.95,
+              sum(rate(nginx_ingress_controller_request_duration_seconds_bucket{namespace="ecommerce-python",ingress="django-django-canary"}[2m])) by (le)
+            ) or on() vector(0)

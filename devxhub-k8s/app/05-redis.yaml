@@ -1,0 +1,72 @@
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to redis
+metadata:                                             # name and place
+  name: redis                                         # must be "redis" because settings.py hardcodes this host name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: redis                     # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster
+  ports:                                              # open ports
+    - name: redis                                     # port name
+      port: 6379                                      # service port
+      targetPort: redis                               # goes to the container port named "redis"
+  selector:                                           # send traffic to the redis pod
+    app.kubernetes.io/name: redis                     # match the pod label below
+---
+apiVersion: apps/v1                                   # apps API version
+kind: Deployment                                      # redis is only a cache, so no permanent storage is needed
+metadata:                                             # name and place
+  name: redis                                         # deployment name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: redis                     # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the deployment works
+  replicas: 1                                         # one redis pod
+  selector:                                           # which pods belong to this deployment
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: redis                   # same label as the pod template
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: redis                 # service and deployment find the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      containers:                                     # list of containers
+        - name: redis                                 # container name
+          image: redis:7.4-alpine                     # small redis image with a fixed version
+          args:                                       # extra start options for redis
+            - "--save"                                # option: when to save data to disk
+            - ""                                      # empty value means never save, it is only a cache
+            - "--appendonly"                          # option: write log file of changes
+            - "no"                                    # turn it off, it is only a cache
+            - "--maxmemory"                           # option: memory limit for the cache
+            - "128mb"                                 # use at most 128 MB for cache data
+            - "--maxmemory-policy"                    # option: what to do when memory is full
+            - "allkeys-lru"                           # remove the least recently used keys first
+          ports:                                      # container ports
+            - name: redis                             # port name used by the service
+              containerPort: 6379                     # redis default port
+          readinessProbe:                             # is the pod ready to get traffic?
+            exec:                                     # run a command inside the container
+              command: ["redis-cli", "ping"]          # redis answers PONG when it is healthy
+            initialDelaySeconds: 5                    # wait 5 seconds before the first check
+            periodSeconds: 10                         # check every 10 seconds
+            timeoutSeconds: 3                         # fail if no answer in 3 seconds
+            failureThreshold: 3                       # not ready after 3 failures in a row
+          livenessProbe:                              # is the pod still alive?
+            exec:                                     # run a command inside the container
+              command: ["redis-cli", "ping"]          # same check as readiness
+            initialDelaySeconds: 15                   # wait 15 seconds, give redis time to start
+            periodSeconds: 20                         # check every 20 seconds
+            timeoutSeconds: 3                         # fail if no answer in 3 seconds
+            failureThreshold: 3                       # restart the container after 3 failures in a row
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 50m                                # 0.05 cpu core
+              memory: 64Mi                            # 64 MB memory
+            limits:                                   # maximum allowed
+              cpu: 250m                               # 0.25 cpu core
+              memory: 192Mi                           # 192 MB, a bit above the 128 MB cache limit

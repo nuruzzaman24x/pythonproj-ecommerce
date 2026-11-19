@@ -1,0 +1,17 @@
+apiVersion: v1                                        # core API version
+kind: ConfigMap                                       # non-secret settings
+metadata:                                             # name and place
+  name: django-config                                 # the Rollout will read this name later
+  namespace: ecommerce-python                         # must match the namespace above
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+data:                                                 # key = value pairs
+  DEBUG: "0"                                          # production mode, no debug pages
+  DJANGO_ALLOWED_HOSTS: "ecommerce-python.local.com localhost"   # space separated, because settings.py splits by space
+  SQL_ENGINE: "django.db.backends.postgresql"         # use postgres
+  SQL_DATABASE: "e_shoper"                            # database name
+  SQL_USER: "postgres"                                # database user
+  SQL_HOST: "postgres"                                # postgres Service name, we will create it later
+  SQL_PORT: "5432"                                    # postgres port
+  REDIS_URL: "redis://redis:6379/0"                   # redis Service name must be "redis" because settings.py hardcodes it

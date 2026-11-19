@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1                        # cert-manager API version
+kind: Certificate                                     # a request for a certificate
+metadata:                                             # name and place
+  name: ecommerce-tls                                 # certificate name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # certificate settings
+  secretName: ecommerce-tls                           # cert-manager creates this secret, ingress uses it
+  duration: 8760h                                     # valid for 365 days
+  renewBefore: 720h                                   # renew automatically 30 days before expiry
+  dnsNames:                                           # host names inside the certificate
+    - ecommerce-python.local.com                      # our domain
+  issuerRef:                                          # who signs the certificate
+    name: selfsigned-issuer                           # the ClusterIssuer in platform/cert-issuer
+    kind: ClusterIssuer                               # issuer type

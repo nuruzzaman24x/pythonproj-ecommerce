@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd                                     # upstream manifest has no namespace, kustomize sets it everywhere
+resources:                                            # apply order is handled by kustomize
+  - 00-namespace.yaml
+  - 01-argocd-install.yaml                            # upstream manifest, pinned v3.5.7
+  - 02-argocd-ingress.yaml
+  - 03-repo-sealed-secret.yaml
+patches:                                              # small changes on top of the upstream file
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: argocd-cmd-params-cm
+      data:
+        server.insecure: "true"

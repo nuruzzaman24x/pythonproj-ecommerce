@@ -1,0 +1,5 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argo-rollouts                              # same as the earlier "kubectl apply -n argo-rollouts"
+resources:                                            # upstream dashboard manifest, pinned v1.10.2
+  - argo-rollouts-dashboard.yaml

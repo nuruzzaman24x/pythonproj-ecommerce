@@ -1,0 +1,40 @@
+apiVersion: batch/v1                                  # batch API version, jobs live here
+kind: Job                                             # run once and stop
+metadata:                                             # name and place
+  name: django-migrate                                # job name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django-migrate            # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the job works
+  backoffLimit: 3                                     # retry at most 3 times if it fails
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: django-migrate        # which component this is
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      restartPolicy: Never                            # do not restart the container, the job creates a new pod on failure
+      containers:                                     # list of containers
+        - name: migrate                               # container name
+          image: nuruzzaman24x/ecommerce-django:1.0   # the app image we pushed to Docker Hub
+          imagePullPolicy: IfNotPresent               # download only if the node does not have it
+          command: ["sh", "-c"]                       # run the script below with sh
+          args:                                       # the script text
+            - |
+              set -e                                  # stop at the first error
+              python manage.py migrate --noinput      # create or update all database tables
+              python manage.py shell -c "import os; from django.contrib.auth import get_user_model; U = get_user_model(); u = os.environ['DJANGO_SUPERUSER_USERNAME']; (not U.objects.filter(username=u).exists()) and U.objects.create_superuser(u, os.environ['DJANGO_SUPERUSER_EMAIL'], os.environ['DJANGO_SUPERUSER_PASSWORD'])"   # create the admin user only if it does not exist yet
+              echo "migrate job finished"             # success message, no password is printed
+          envFrom:                                    # load many variables at once
+            - configMapRef:                           # from the configmap
+                name: django-config                   # normal settings
+            - secretRef:                              # from the secret
+                name: django-secret                   # secret values like SECRET_KEY and passwords
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 100m                               # 0.1 cpu core
+              memory: 256Mi                           # 256 MB memory
+            limits:                                   # maximum allowed
+              cpu: 500m                               # 0.5 cpu core
+              memory: 512Mi                           # 512 MB memory

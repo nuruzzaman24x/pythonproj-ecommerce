@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:                                            # all app manifests (kustomize orders kinds itself)
+  - 00-namespace.yaml
+  - 01-configmap.yaml
+  - 03-sealed-secret.yaml
+  - 04-postgres.yaml
+  - 05-redis.yaml
+  - 06-migrate-job.yaml
+  - 07-django-services.yaml
+  - 08-media-pvc.yaml
+  - 09-nginx-static.yaml
+  - 10-ingress.yaml
+  - 11-django-rollout.yaml
+  - 12-django-hpa.yaml
+  - 13-certificate.yaml
+  - 14-nginx-static-hpa.yaml
+  - 15-pdb.yaml
+  - 16-postgres-backup.yaml
+  - 17-quota-limits.yaml

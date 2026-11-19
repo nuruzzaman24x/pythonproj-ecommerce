@@ -1,0 +1,37 @@
+apiVersion: cert-manager.io/v1                        # cert-manager API version
+kind: Certificate                                     # a request for a certificate
+metadata:                                             # name and place
+  name: grafana-tls                                   # certificate name
+  namespace: monitoring                               # same namespace as grafana
+spec:                                                 # certificate settings
+  secretName: grafana-tls                             # cert-manager creates this secret
+  duration: 8760h                                     # valid for 365 days
+  renewBefore: 720h                                   # renew 30 days before expiry
+  dnsNames:                                           # host names inside the certificate
+    - grafana.local.com                               # grafana domain
+  issuerRef:                                          # who signs the certificate
+    name: selfsigned-issuer                           # the ClusterIssuer we already created
+    kind: ClusterIssuer                               # issuer type
+---
+apiVersion: networking.k8s.io/v1                      # ingress API version
+kind: Ingress                                         # traffic rules from outside to inside
+metadata:                                             # name and place
+  name: grafana                                       # ingress name
+  namespace: monitoring                               # same namespace as grafana
+spec:                                                 # how the ingress works
+  ingressClassName: nginx                             # use the existing ingress-nginx controller
+  tls:                                                # enable https
+    - hosts:                                          # which host names use this certificate
+        - grafana.local.com                           # grafana domain
+      secretName: grafana-tls                         # the tls secret from the Certificate above
+  rules:                                              # list of rules
+    - host: grafana.local.com                         # only this host name matches
+      http:                                           # http rules
+        paths:                                        # list of paths
+          - path: /                                   # every path
+            pathType: Prefix                          # match anything that starts with /
+            backend:                                  # where to send the traffic
+              service:                                # a service
+                name: monitoring-grafana              # created by the helm chart (release "monitoring")
+                port:                                 # service port
+                  number: 80                          # grafana service port

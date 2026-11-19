@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1                      # Argo CD API version
+kind: AppProject                                      # a fence that limits what apps can do
+metadata:                                             # name and place
+  name: ecommerce                                     # project name
+  namespace: argocd                                   # AppProjects always live in the argocd namespace
+spec:                                                 # project rules
+  description: Ecommerce python application           # shown in the UI
+  sourceRepos:                                        # apps may only read from these repos
+    - https://github.com/nuruzzaman24x/pythonproj-ecommerce.git
+  destinations:                                       # apps may only deploy to these places
+    - server: https://kubernetes.default.svc          # this same cluster
+      namespace: ecommerce-python                     # only this namespace
+  clusterResourceWhitelist:                           # cluster-wide kinds the apps may create
+    - group: ""                                       # core API group
+      kind: Namespace                                 # our app manifests contain the Namespace
+  namespaceResourceWhitelist:                         # namespaced kinds the apps may create
+    - group: "*"                                      # any group
+      kind: "*"                                       # any kind

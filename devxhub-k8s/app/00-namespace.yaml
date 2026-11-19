@@ -1,0 +1,7 @@
+apiVersion: v1                                        # core API version
+kind: Namespace                                       # we are creating a namespace
+metadata:                                             # name and labels
+  name: ecommerce-python                              # same as the project name
+  labels:                                             # standard labels
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+    environment: prod                                 # which environment

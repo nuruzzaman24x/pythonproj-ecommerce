@@ -1,0 +1,14 @@
+apiVersion: policy/v1                                 # PDB API version
+kind: PodDisruptionBudget                             # limits how many pods can be down during maintenance
+metadata:                                             # name and place
+  name: ingress-nginx-controller                      # pdb name
+  namespace: ingress-nginx                            # same namespace as the controller
+  labels:                                             # standard labels
+    app.kubernetes.io/name: ingress-nginx             # which component this is
+spec:                                                 # how the pdb works
+  minAvailable: 1                                     # at least 1 controller pod must stay running
+  selector:                                           # which pods this pdb protects
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: ingress-nginx           # same label as the controller pods
+      app.kubernetes.io/instance: ingress-nginx       # same instance
+      app.kubernetes.io/component: controller         # controller pod only

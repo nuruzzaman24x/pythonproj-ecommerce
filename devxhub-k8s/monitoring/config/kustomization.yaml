@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:                                            # needs the helm release first (ServiceMonitor/PrometheusRule CRDs)
+  - 02-grafana-ingress.yaml
+  - 03-ingress-nginx-metrics.yaml
+  - 04-argo-rollouts-podmonitor.yaml
+  - 05-alert-rules.yaml
+  - 06-analysis-template.yaml
+  - 07-exporters.yaml
+  - 08-exporters-monitoring.yaml

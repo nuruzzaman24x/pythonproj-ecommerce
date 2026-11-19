@@ -1,0 +1,36 @@
+apiVersion: v1                                        # core API version
+kind: ResourceQuota                                   # whole namespace-এর মোট সীমা
+metadata:                                             # name and place
+  name: ecommerce-quota                               # quota name
+  namespace: ecommerce-python                         # শুধু এই namespace-এ কাজ করবে
+  labels:                                             # standard labels
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # সীমার তালিকা
+  hard:                                               # এর বেশি নেওয়া যাবে না
+    requests.cpu: "4"                                 # সব pod মিলিয়ে সর্বোচ্চ 4 cpu চাইতে পারবে
+    requests.memory: 6Gi                              # সব pod মিলিয়ে সর্বোচ্চ 6 GB memory চাইতে পারবে
+    limits.cpu: "14"                                  # HPA max আর canary-র বাড়তি pod ধরে হিসাব করা
+    limits.memory: 10Gi                               # সব pod-এর memory limit-এর মোট সীমা
+    pods: "30"                                        # সর্বোচ্চ 30টা pod
+    persistentvolumeclaims: "10"                      # সর্বোচ্চ 10টা PVC
+    requests.storage: 40Gi                            # সব PVC মিলিয়ে সর্বোচ্চ 40 GB
+---
+apiVersion: v1                                        # core API version
+kind: LimitRange                                      # প্রতিটা container-এর ডিফল্ট আর সীমা
+metadata:                                             # name and place
+  name: ecommerce-limits                              # limitrange name
+  namespace: ecommerce-python                         # শুধু এই namespace-এ কাজ করবে
+  labels:                                             # standard labels
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # নিয়মের তালিকা
+  limits:                                             # নিয়মগুলো
+    - type: Container                                 # প্রতিটা container-এর জন্য
+      defaultRequest:                                 # request না লিখলে এটা বসবে
+        cpu: 50m                                      # 0.05 cpu core
+        memory: 64Mi                                  # 64 MB memory
+      default:                                        # limit না লিখলে এটা বসবে
+        cpu: 500m                                     # 0.5 cpu core
+        memory: 256Mi                                 # 256 MB memory
+      max:                                            # কোনো container এর বেশি চাইতে পারবে না
+        cpu: "2"                                      # সর্বোচ্চ 2 cpu core
+        memory: 2Gi                                   # সর্বোচ্চ 2 GB memory

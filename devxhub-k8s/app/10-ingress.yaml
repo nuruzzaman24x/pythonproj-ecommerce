@@ -1,0 +1,60 @@
+apiVersion: networking.k8s.io/v1                      # ingress API version
+kind: Ingress                                         # traffic rules from outside to inside
+metadata:                                             # name and place
+  name: django                                        # the Rollout will use this name as its stable ingress
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+  annotations:                                        # extra instructions for the ingress controller
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"   # allow uploads up to 10 MB, the default 1 MB is too small for product images
+spec:                                                 # how the ingress works
+  ingressClassName: nginx                             # use the existing ingress-nginx controller
+  tls:                                                # enable https
+    - hosts:                                          # which host names use this certificate
+        - ecommerce-python.local.com                  # our domain
+      secretName: ecommerce-tls                       # the tls secret we created
+  rules:                                              # list of rules
+    - host: ecommerce-python.local.com                # only this host name matches
+      http:                                           # http rules
+        paths:                                        # list of paths
+          - path: /                                   # every path that is not static or media
+            pathType: Prefix                          # match anything that starts with /
+            backend:                                  # where to send the traffic
+              service:                                # a service
+                name: django-stable                   # the production version, Argo Rollouts will create the 20% canary copy of this ingress
+                port:                                 # service port
+                  number: 80                          # port 80 of the service
+---
+apiVersion: networking.k8s.io/v1                      # ingress API version
+kind: Ingress                                         # traffic rules from outside to inside
+metadata:                                             # name and place
+  name: nginx-static                                  # separate ingress for static and media files
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the ingress works
+  ingressClassName: nginx                             # use the existing ingress-nginx controller
+  tls:                                                # enable https
+    - hosts:                                          # which host names use this certificate
+        - ecommerce-python.local.com                  # our domain
+      secretName: ecommerce-tls                       # the tls secret we created
+  rules:                                              # list of rules
+    - host: ecommerce-python.local.com                # same host name as above
+      http:                                           # http rules
+        paths:                                        # list of paths
+          - path: /static/                            # css, js and images of the site
+            pathType: Prefix                          # match anything that starts with /static/
+            backend:                                  # where to send the traffic
+              service:                                # a service
+                name: nginx-static                    # the nginx static service
+                port:                                 # service port
+                  number: 80                          # port 80 of the service
+          - path: /media/                             # uploaded product images
+            pathType: Prefix                          # match anything that starts with /media/
+            backend:                                  # where to send the traffic
+              service:                                # a service
+                name: nginx-static                    # the nginx static service
+                port:                                 # service port
+                  number: 80                          # port 80 of the service

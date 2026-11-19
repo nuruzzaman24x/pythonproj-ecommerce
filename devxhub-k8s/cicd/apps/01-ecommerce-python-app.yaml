@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1                      # Argo CD API version
+kind: Application                                     # one app = one git path deployed to one place
+metadata:                                             # name and place
+  name: ecommerce-python                              # application name
+  namespace: argocd                                   # Applications always live in the argocd namespace
+spec:                                                 # how the application works
+  project: ecommerce                                  # the AppProject above
+  source:                                             # where the manifests are
+    repoURL: https://github.com/nuruzzaman24x/pythonproj-ecommerce.git   # the private repo
+    targetRevision: main                              # git branch to follow
+    path: devxhub-k8s/app                             # folder with the kustomization.yaml
+  destination:                                        # where to deploy
+    server: https://kubernetes.default.svc            # this same cluster
+    namespace: ecommerce-python                       # the app namespace
+  ignoreDifferences:                                  # fields that other controllers change, so git must not fight them
+    - group: argoproj.io                              # Rollout API group
+      kind: Rollout                                   # the django rollout
+      name: django                                    # rollout name
+      jsonPointers: ["/spec/replicas"]                # the HPA changes replicas
+    - group: apps                                     # Deployment API group
+      kind: Deployment                                # the nginx deployment
+      name: nginx-static                              # deployment name
+      jsonPointers: ["/spec/replicas"]                # the HPA changes replicas
+    - group: ""                                       # core API group
+      kind: Service                                   # stable service
+      name: django-stable                             # service name
+      jsonPointers: ["/spec/selector"]                # Argo Rollouts adds the pod-template-hash here
+    - group: ""                                       # core API group
+      kind: Service                                   # canary service
+      name: django-canary                             # service name
+      jsonPointers: ["/spec/selector"]                # Argo Rollouts adds the pod-template-hash here
+  syncPolicy:                                         # no "automated" yet, we sync by hand first
+    syncOptions:                                      # extra sync settings
+      - RespectIgnoreDifferences=true                 # also skip the fields above while syncing, not only while comparing

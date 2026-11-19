@@ -1,0 +1,98 @@
+apiVersion: argoproj.io/v1alpha1                      # Argo Rollouts API version
+kind: Rollout                                         # like a Deployment, but with canary support
+metadata:                                             # name and place
+  name: django                                        # rollout name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: django                    # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the rollout works
+  replicas: 3                                         # three django pods
+  revisionHistoryLimit: 3                             # keep the last 3 old versions for rollback
+  selector:                                           # which pods belong to this rollout
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: django                  # same label as the pod template
+  strategy:                                           # how a new version is released
+    canary:                                           # canary release
+      canaryService: django-canary                    # service that points to the new version
+      stableService: django-stable                    # service that points to the production version
+      trafficRouting:                                 # how to split the traffic exactly
+        nginx:                                        # use ingress-nginx for the split
+          stableIngress: django                       # the ingress we created, Argo makes a canary copy of it
+      steps:                                          # release steps, in order
+        - setWeight: 20                               # send 20% of the traffic to the new version
+        - analysis:                                   # check the new version automatically
+            templates:                                # list of checks
+              - templateName: django-canary-check     # the AnalysisTemplate we created
+        - setWeight: 50                               # passed, so send 50% of the traffic
+        - pause: {duration: 2m}                       # watch for 2 minutes
+        - analysis:                                   # check again at 50%
+            templates:                                # list of checks
+              - templateName: django-canary-check     # same checks
+        # after the last step the rollout goes to 100% by itself
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: django                # services find the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      topologySpreadConstraints:                      # spread pods across nodes
+        - maxSkew: 1                                  # pod count difference between nodes is at most 1
+          topologyKey: kubernetes.io/hostname         # spread by node name
+          whenUnsatisfiable: ScheduleAnyway           # prefer spreading, but still schedule if it cannot
+          labelSelector:                              # which pods to count
+            matchLabels:                              # match by labels
+              app.kubernetes.io/name: django          # the django pods
+      containers:                                     # list of containers
+        - name: django                                # container name
+          image: nuruzzaman24x/ecommerce-django:1.0   # the app image we pushed to Docker Hub
+          imagePullPolicy: IfNotPresent               # download only if the node does not have it
+          ports:                                      # container ports
+            - name: http                              # port name used by probes
+              containerPort: 8000                     # gunicorn port
+          envFrom:                                    # load many variables at once
+            - configMapRef:                           # from the configmap
+                name: django-config                   # normal settings
+            - secretRef:                              # from the secret
+                name: django-secret                   # secret values like SECRET_KEY and passwords
+          volumeMounts:                               # where to mount storage
+            - name: media                             # the volume below
+              mountPath: /app/static/media            # django saves uploaded images here
+          startupProbe:                               # has the app finished starting?
+            tcpSocket:                                # only check that the port is open
+              port: http                              # the container port named "http"
+            periodSeconds: 5                          # check every 5 seconds
+            failureThreshold: 24                      # allow up to 2 minutes to start (24 x 5s)
+          readinessProbe:                             # is the pod ready to get traffic?
+            httpGet:                                  # call a web address
+              path: /                                 # the home page
+              port: http                              # the container port named "http"
+              httpHeaders:                            # extra header for the request
+                - name: Host                          # django checks this against ALLOWED_HOSTS
+                  value: ecommerce-python.local.com   # our real domain, otherwise django answers 400
+            initialDelaySeconds: 10                   # wait 10 seconds before the first check
+            periodSeconds: 10                         # check every 10 seconds
+            timeoutSeconds: 5                         # fail if no answer in 5 seconds
+            failureThreshold: 3                       # not ready after 3 failures in a row
+          livenessProbe:                              # is the pod still alive?
+            tcpSocket:                                # only check that the port is open, a light check
+              port: http                              # the container port named "http"
+            initialDelaySeconds: 30                   # wait 30 seconds, give gunicorn time to start
+            periodSeconds: 20                         # check every 20 seconds
+            timeoutSeconds: 5                         # fail if no answer in 5 seconds
+            failureThreshold: 3                       # restart the container after 3 failures in a row
+          resources:                                  # cpu and memory limits, HPA needs the requests
+            requests:                                 # minimum guaranteed
+              cpu: 100m                               # 0.1 cpu core
+              memory: 256Mi                           # 256 MB memory
+            limits:                                   # maximum allowed
+              cpu: "1"                                # 1 cpu core
+              memory: 512Mi                           # 512 MB memory
+          securityContext:                            # safety settings for the container
+            allowPrivilegeEscalation: false           # the process cannot gain more rights
+            capabilities:                             # linux powers
+              drop: ["ALL"]                           # remove all extra linux powers
+      volumes:                                        # storage sources
+        - name: media                                 # volume name used in volumeMounts
+          persistentVolumeClaim:                      # take the content from a storage claim
+            claimName: django-media                   # the shared media storage

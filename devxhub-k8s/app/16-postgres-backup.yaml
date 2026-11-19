@@ -1,0 +1,72 @@
+apiVersion: v1                                        # core API version
+kind: PersistentVolumeClaim                           # a request for storage space
+metadata:                                             # name and place
+  name: postgres-backup                               # backup storage name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: postgres-backup           # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # claim settings
+  accessModes: ["ReadWriteOnce"]                      # one pod at a time is enough for backup jobs
+  storageClassName: nfs-client                        # use the NFS storage class
+  resources:                                          # size request
+    requests:                                         # asked size
+      storage: 5Gi                                    # 5 GB of space for backup files
+---
+apiVersion: batch/v1                                  # batch API version
+kind: CronJob                                         # run on a schedule
+metadata:                                             # name and place
+  name: postgres-backup                               # cronjob name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: postgres-backup           # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the cronjob works
+  schedule: "0 2 * * *"                               # every day at 02:00 (cluster time)
+  concurrencyPolicy: Forbid                           # do not start a new backup if the old one is still running
+  successfulJobsHistoryLimit: 3                       # keep the last 3 successful jobs
+  failedJobsHistoryLimit: 3                           # keep the last 3 failed jobs
+  jobTemplate:                                        # job blueprint
+    spec:                                             # job settings
+      backoffLimit: 2                                 # retry at most 2 times if it fails
+      template:                                       # pod blueprint
+        metadata:                                     # pod labels
+          labels:                                     # standard labels
+            app.kubernetes.io/name: postgres-backup   # which component this is
+            app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+        spec:                                         # pod settings
+          restartPolicy: Never                        # do not restart the container, the job creates a new pod on failure
+          containers:                                 # list of containers
+            - name: backup                            # container name
+              image: postgres:15                      # same version as the database, so pg_dump matches
+              command: ["sh", "-c"]                   # run the script below with sh
+              args:                                   # the script text
+                - |
+                  set -e                              # stop at the first error
+                  FILE=/backup/$SQL_DATABASE-$(date +%Y%m%d-%H%M%S).sql.gz   # backup file name with date and time
+                  pg_dump -h $SQL_HOST -p $SQL_PORT -U $SQL_USER $SQL_DATABASE | gzip > $FILE   # dump the database and compress it
+                  echo "backup saved: $FILE"          # success message
+                  find /backup -name "*.sql.gz" -mtime +7 -delete   # delete backups older than 7 days
+              env:                                    # environment variables
+                - name: PGPASSWORD                    # pg_dump reads the password from this variable
+                  valueFrom:                          # take the value from somewhere else
+                    secretKeyRef:                     # from the secret
+                      name: django-secret             # secret name
+                      key: SQL_PASSWORD               # key inside the secret
+              envFrom:                                # load many variables at once
+                - configMapRef:                       # from the configmap
+                    name: django-config               # gives SQL_HOST, SQL_PORT, SQL_USER, SQL_DATABASE
+              volumeMounts:                           # where to mount storage
+                - name: backup                        # the volume below
+                  mountPath: /backup                  # backup files are saved here
+              resources:                              # cpu and memory limits
+                requests:                             # minimum guaranteed
+                  cpu: 50m                            # 0.05 cpu core
+                  memory: 128Mi                       # 128 MB memory
+                limits:                               # maximum allowed
+                  cpu: 500m                           # 0.5 cpu core
+                  memory: 512Mi                       # 512 MB memory
+          volumes:                                    # storage sources
+            - name: backup                            # volume name used in volumeMounts
+              persistentVolumeClaim:                  # take the content from a storage claim
+                claimName: postgres-backup            # the backup storage above

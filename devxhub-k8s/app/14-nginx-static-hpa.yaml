@@ -1,0 +1,35 @@
+apiVersion: autoscaling/v2                            # HPA API version
+kind: HorizontalPodAutoscaler                         # automatically changes the number of pods
+metadata:                                             # name and place
+  name: nginx-static                                  # hpa name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: nginx-static              # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the hpa works
+  scaleTargetRef:                                     # what to scale
+    apiVersion: apps/v1                               # normal Deployment API version
+    kind: Deployment                                  # nginx-static is a Deployment, not a Rollout
+    name: nginx-static                                # deployment name
+  minReplicas: 2                                      # never go below 2 pods
+  maxReplicas: 4                                      # never go above 4 pods
+  metrics:                                            # what to measure
+    - type: Resource                                  # pod resource usage
+      resource:                                       # resource settings
+        name: cpu                                     # measure cpu
+        target:                                       # target value
+          type: Utilization                           # percent of the cpu request (25m)
+          averageUtilization: 70                      # add pods when average cpu is above 70% of the request
+  behavior:                                           # how fast to scale
+    scaleUp:                                          # adding pods
+      stabilizationWindowSeconds: 0                   # scale up immediately
+      policies:                                       # scale up rules
+        - type: Pods                                  # change by a number of pods
+          value: 1                                    # add at most 1 pod
+          periodSeconds: 60                           # every 60 seconds
+    scaleDown:                                        # removing pods
+      stabilizationWindowSeconds: 300                 # wait 5 minutes before removing pods
+      policies:                                       # scale down rules
+        - type: Pods                                  # change by a number of pods
+          value: 1                                    # remove at most 1 pod
+          periodSeconds: 60                           # every 60 seconds

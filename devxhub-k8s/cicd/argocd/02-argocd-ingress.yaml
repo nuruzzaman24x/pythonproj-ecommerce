@@ -1,0 +1,37 @@
+apiVersion: cert-manager.io/v1                        # cert-manager API version
+kind: Certificate                                     # a request for a certificate
+metadata:                                             # name and place
+  name: argocd-tls                                    # certificate name
+  namespace: argocd                                   # same namespace as argocd-server
+spec:                                                 # certificate settings
+  secretName: argocd-tls                              # cert-manager creates this secret
+  duration: 8760h                                     # valid for 365 days
+  renewBefore: 720h                                   # renew 30 days before expiry
+  dnsNames:                                           # host names inside the certificate
+    - argocd.local.com                                # Argo CD domain
+  issuerRef:                                          # who signs the certificate
+    name: selfsigned-issuer                           # the ClusterIssuer we already have
+    kind: ClusterIssuer                               # issuer type
+---
+apiVersion: networking.k8s.io/v1                      # ingress API version
+kind: Ingress                                         # traffic rules from outside to inside
+metadata:                                             # name and place
+  name: argocd                                        # ingress name
+  namespace: argocd                                   # same namespace as argocd-server
+spec:                                                 # how the ingress works
+  ingressClassName: nginx                             # use the existing ingress-nginx controller
+  tls:                                                # enable https
+    - hosts:                                          # which host names use this certificate
+        - argocd.local.com                            # Argo CD domain
+      secretName: argocd-tls                          # the tls secret from the Certificate above
+  rules:                                              # list of rules
+    - host: argocd.local.com                          # only this host name matches
+      http:                                           # http rules
+        paths:                                        # list of paths
+          - path: /                                   # every path
+            pathType: Prefix                          # match anything that starts with /
+            backend:                                  # where to send the traffic
+              service:                                # a service
+                name: argocd-server                   # created by the upstream manifest
+                port:                                 # service port
+                  number: 80                          # plain http inside, because server.insecure is on

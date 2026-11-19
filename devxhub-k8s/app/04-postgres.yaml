@@ -1,0 +1,94 @@
+apiVersion: v1                                        # core API version
+kind: Service                                         # a network door to postgres
+metadata:                                             # name and place
+  name: postgres                                      # must be "postgres" because SQL_HOST in the configmap uses this name
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: postgres                  # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the service works
+  type: ClusterIP                                     # only reachable inside the cluster, never from outside
+  ports:                                              # open ports
+    - name: postgres                                  # port name
+      port: 5432                                      # service port
+      targetPort: postgres                            # goes to the container port named "postgres"
+  selector:                                           # send traffic to the postgres pod
+    app.kubernetes.io/name: postgres                  # match the pod label below
+---
+apiVersion: apps/v1                                   # apps API version
+kind: StatefulSet                                     # for apps that keep permanent data
+metadata:                                             # name and place
+  name: postgres                                      # statefulset name, the pod will be postgres-0
+  namespace: ecommerce-python                         # same namespace as the app
+  labels:                                             # standard labels
+    app.kubernetes.io/name: postgres                  # which component this is
+    app.kubernetes.io/part-of: ecommerce-python       # which project this belongs to
+spec:                                                 # how the statefulset works
+  serviceName: postgres                               # the service created above
+  replicas: 1                                         # only one database pod
+  selector:                                           # which pods belong to this statefulset
+    matchLabels:                                      # match by labels
+      app.kubernetes.io/name: postgres                # same label as the pod template
+  template:                                           # pod blueprint
+    metadata:                                         # pod labels
+      labels:                                         # standard labels
+        app.kubernetes.io/name: postgres              # service and statefulset find the pod by this label
+        app.kubernetes.io/part-of: ecommerce-python   # which project this belongs to
+    spec:                                             # pod settings
+      containers:                                     # list of containers
+        - name: postgres                              # container name
+          image: postgres:15                          # postgres major version 15
+          ports:                                      # container ports
+            - name: postgres                          # port name used by the service
+              containerPort: 5432                     # postgres default port
+          env:                                        # environment variables
+            - name: POSTGRES_DB                       # database name to create on first start
+              valueFrom:                              # take the value from somewhere else
+                configMapKeyRef:                      # from the configmap
+                  name: django-config                 # configmap name
+                  key: SQL_DATABASE                   # key inside the configmap
+            - name: POSTGRES_USER                     # database user to create on first start
+              valueFrom:                              # take the value from somewhere else
+                configMapKeyRef:                      # from the configmap
+                  name: django-config                 # configmap name
+                  key: SQL_USER                       # key inside the configmap
+            - name: POSTGRES_PASSWORD                 # database password
+              valueFrom:                              # take the value from somewhere else
+                secretKeyRef:                         # from the secret
+                  name: django-secret                 # secret name
+                  key: SQL_PASSWORD                   # key inside the secret
+            - name: PGDATA                            # where postgres keeps its files
+              value: /var/lib/postgresql/data/pgdata  # use a sub folder, because the NFS mount root can have extra files
+          volumeMounts:                               # where to mount the storage
+            - name: data                              # volume name from volumeClaimTemplates
+              mountPath: /var/lib/postgresql/data     # postgres data folder
+          readinessProbe:                             # is the pod ready to get traffic?
+            exec:                                     # run a command inside the container
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]   # success means postgres accepts connections
+            initialDelaySeconds: 10                   # wait 10 seconds before the first check
+            periodSeconds: 10                         # check every 10 seconds
+            timeoutSeconds: 5                         # fail if no answer in 5 seconds
+            failureThreshold: 6                       # not ready after 6 failures in a row
+          livenessProbe:                              # is the pod still alive?
+            exec:                                     # run a command inside the container
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]   # same check as readiness
+            initialDelaySeconds: 30                   # wait 30 seconds, give postgres time to start
+            periodSeconds: 20                         # check every 20 seconds
+            timeoutSeconds: 5                         # fail if no answer in 5 seconds
+            failureThreshold: 6                       # restart the container after 6 failures in a row
+          resources:                                  # cpu and memory limits
+            requests:                                 # minimum guaranteed
+              cpu: 100m                               # 0.1 cpu core
+              memory: 256Mi                           # 256 MB memory
+            limits:                                   # maximum allowed
+              cpu: "1"                                # 1 cpu core
+              memory: 1Gi                             # 1 GB memory
+  volumeClaimTemplates:                               # storage request, one per pod
+    - metadata:                                       # claim name
+        name: data                                    # same name as in volumeMounts
+      spec:                                           # claim settings
+        accessModes: ["ReadWriteOnce"]                # one pod can read and write
+        storageClassName: nfs-client                  # use the NFS storage class
+        resources:                                    # size request
+          requests:                                   # asked size
+            storage: 10Gi                             # 10 GB of space

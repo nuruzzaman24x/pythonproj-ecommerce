@@ -1,0 +1,6 @@
+apiVersion: cert-manager.io/v1                        # cert-manager API version
+kind: ClusterIssuer                                   # a certificate maker for the whole cluster
+metadata:                                             # name
+  name: selfsigned-issuer                             # issuer name
+spec:                                                 # how the issuer works
+  selfSigned: {}                                      # sign certificates with their own key, good for internal domains
