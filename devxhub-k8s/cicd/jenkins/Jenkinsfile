@@ -1,0 +1,97 @@
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    triggers {
+        pollSCM('H/2 * * * *')   // private IP, tai GitHub webhook na, polling
+    }
+
+    environment {
+        DJANGO_IMAGE = 'nuruzzaman24x/ecommerce-django'
+        NGINX_IMAGE  = 'nuruzzaman24x/ecommerce-nginx'
+        GIT_REPO     = 'github.com/nuruzzaman24x/pythonproj-ecommerce.git'
+        DOCKER_BUILDKIT = '1'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.SHORT_SHA = sh(returnStdout: true, script: 'git rev-parse --short=7 HEAD').trim()
+                    env.IMAGE_TAG = "${env.BUILD_NUMBER}-${env.SHORT_SHA}"
+                    def msg = sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
+                    env.SKIP_CI = msg.contains('[skip ci]') ? 'true' : 'false'
+                    echo "Image tag: ${env.IMAGE_TAG} | skip: ${env.SKIP_CI}"
+                    if (env.SKIP_CI == 'true') {
+                        currentBuild.result = 'NOT_BUILT'
+                    }
+                }
+            }
+        }
+
+        stage('Build images') {
+            when { expression { env.SKIP_CI == 'false' } }
+            steps {
+                sh '''
+                    docker build -f Dockerfile.k8s --target django \
+                        -t $DJANGO_IMAGE:$IMAGE_TAG .
+                    docker build -f Dockerfile.k8s --target nginx \
+                        -t $NGINX_IMAGE:$IMAGE_TAG .
+                '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            when { expression { env.SKIP_CI == 'false' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                  usernameVariable: 'DH_USER',
+                                                  passwordVariable: 'DH_TOKEN')]) {
+                    sh '''
+                        echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+                        docker push $DJANGO_IMAGE:$IMAGE_TAG
+                        docker push $NGINX_IMAGE:$IMAGE_TAG
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Update manifests (GitOps)') {
+            when { expression { env.SKIP_CI == 'false' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-token',
+                                                  usernameVariable: 'GH_USER',
+                                                  passwordVariable: 'GH_TOKEN')]) {
+                    sh '''
+                        sed -i -E "s|(nuruzzaman24x/ecommerce-django:)[^ ]+|\\1${IMAGE_TAG}|" \
+                            devxhub-k8s/app/11-django-rollout.yaml
+                        sed -i -E "s|(nuruzzaman24x/ecommerce-nginx:)[^ ]+|\\1${IMAGE_TAG}|" \
+                            devxhub-k8s/app/09-nginx-static.yaml
+
+                        git config user.name  "jenkins-ci"
+                        git config user.email "jenkins-ci@local"
+                        git add devxhub-k8s/app/11-django-rollout.yaml devxhub-k8s/app/09-nginx-static.yaml
+                        git commit -m "ci: update image tag to ${IMAGE_TAG} [skip ci]"
+                        git pull --rebase https://${GH_USER}:${GH_TOKEN}@${GIT_REPO} main
+                        git push https://${GH_USER}:${GH_TOKEN}@${GIT_REPO} HEAD:main
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker image prune -f || true'
+        }
+        success { echo "Done. ArgoCD-te ecommerce-python app Sync koro (tag: ${env.IMAGE_TAG})." }
+        failure { echo 'Pipeline failed, console log dekho.' }
+    }
+}
