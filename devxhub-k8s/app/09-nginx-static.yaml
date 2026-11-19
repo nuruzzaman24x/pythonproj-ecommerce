@@ -70,7 +70,7 @@ spec:                                                 # how the deployment works
               app.kubernetes.io/name: nginx-static    # the nginx pods
       containers:                                     # list of containers
         - name: nginx                                 # container name
-          image: nuruzzaman24x/ecommerce-nginx:1.0    # the nginx image with static files inside
+          image: nuruzzaman24x/ecommerce-nginx:5-20900f8    # the nginx image with static files inside
           imagePullPolicy: IfNotPresent               # download only if the node does not have it
           ports:                                      # container ports
             - name: http                              # port name used by the service
