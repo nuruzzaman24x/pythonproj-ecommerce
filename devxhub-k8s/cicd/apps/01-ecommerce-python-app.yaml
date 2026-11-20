@@ -29,6 +29,7 @@ spec:                                                 # how the application work
       kind: Service                                   # canary service
       name: django-canary                             # service name
       jsonPointers: ["/spec/selector"]                # Argo Rollouts adds the pod-template-hash here
-  syncPolicy:                                         # no "automated" yet, we sync by hand first
+  syncPolicy:                                         # how argocd syncs this app
+    automated: {}                                     # sync by itself when git changes, no manual click
     syncOptions:                                      # extra sync settings
       - RespectIgnoreDifferences=true                 # also skip the fields above while syncing, not only while comparing
