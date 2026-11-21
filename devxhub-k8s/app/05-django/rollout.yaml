@@ -45,7 +45,7 @@ spec:                                                 # how the rollout works
               app.kubernetes.io/name: django          # the django pods
       containers:                                     # list of containers
         - name: django                                # container name
-          image: nuruzzaman24x/ecommerce-django:7-de820d8   # the app image we pushed to Docker Hub
+          image: nuruzzaman24x/ecommerce-django:11-eae0987   # the app image we pushed to Docker Hub
           imagePullPolicy: IfNotPresent               # download only if the node does not have it
           ports:                                      # container ports
             - name: http                              # port name used by probes

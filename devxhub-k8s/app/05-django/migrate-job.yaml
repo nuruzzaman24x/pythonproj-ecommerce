@@ -20,7 +20,7 @@ spec:                                                 # how the job works
       restartPolicy: Never                            # do not restart the container, the job creates a new pod on failure
       containers:                                     # list of containers
         - name: migrate                               # container name
-          image: nuruzzaman24x/ecommerce-django:7-de820d8   # the app image, CI updates this tag
+          image: nuruzzaman24x/ecommerce-django:11-eae0987   # the app image, CI updates this tag
           imagePullPolicy: IfNotPresent               # download only if the node does not have it
           command: ["sh", "-c"]                       # run the script below with sh
           args:                                       # the script text
